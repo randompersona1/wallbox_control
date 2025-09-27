@@ -5,7 +5,9 @@ description = "A Python library for controlling wallboxes via Modbus RTU communi
 readme = "README.md"
 requires-python = ">=3.11, <3.12"
 dependencies = [
+    "fastapi>=0.117.1",
     "minimalmodbus>=2.1.1",
+    "uvicorn>=0.37.0",
 ]
 authors = [
     {name = "Your Name", email = "your.email@example.com"},

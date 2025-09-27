@@ -50,9 +50,12 @@ class _PropIndexer(type):
         own_props = {n: o for n, o in attrs.items() if isinstance(o, property)}
 
         cls.OWN_GETTERS = tuple(n for n, p in own_props.items() if p.fget is not None)
-        cls.OWN_SETTERS = tuple(n for n, p in own_props.items() if p.fget and p.fset is not None)
+        cls.OWN_SETTERS = tuple(
+            n for n, p in own_props.items() if p.fget and p.fset is not None
+        )
 
         return cls
+
 
 class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
     OWN_GETTERS: ClassVar[tuple[str, ...]]
