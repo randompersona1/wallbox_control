@@ -261,7 +261,7 @@ class WallboxController:
 
 
 def gpio_worker(wallbox_controller: WallboxController):
-    while False:
+    while True:
         """
         GPIO1 HIGH: Stop charging (0A)
         GPIO2 HIGH: 16A
@@ -288,7 +288,7 @@ def main():
 
     # Example: Create controller with keepalive every 5 seconds
     controller = WallboxController(
-        port="/dev/ttyUSB0", address=1, keepalive_interval=8.0
+        port="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0", address=1, keepalive_interval=8.0
     )
     controller.start()
 

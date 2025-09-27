@@ -4,9 +4,8 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
 from main import WallboxController
+from pydantic import BaseModel
 
 
 class MaxCurrentRequest(BaseModel):
