@@ -208,12 +208,23 @@ def web_server_worker(
         host: Host address to bind the server to (default: 0.0.0.0)
         port: Port number to run the server on (default: 8000)
     """
-    server = WebServerController(wallbox_controller, host, port)
-    server.start()
-
-    # Keep the thread alive
+    logger = logging.getLogger("WebServer_worker")
+    
     try:
-        while server._running:
-            threading.Event().wait(1.0)
-    except KeyboardInterrupt:
-        server.stop()
+        server = WebServerController(wallbox_controller, host, port)
+        server.start()
+
+        # Keep the thread alive
+        try:
+            while server._running:
+                threading.Event().wait(1.0)
+        except KeyboardInterrupt:
+            logger.info("Web server worker received shutdown signal")
+            server.stop()
+        except Exception as e:
+            logger.error("Web server worker error: %s", e)
+            server.stop()
+            raise
+    except Exception as e:
+        logger.error("Failed to start web server: %s", e)
+        raise

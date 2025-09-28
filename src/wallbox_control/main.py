@@ -182,7 +182,6 @@ class WallboxController:
         with self._thread_safe_access():
             return self.wallbox.hardware_min_current
 
-    # Thread-safe property accessors - Read-write properties
     def get_modbus_timeout(self) -> int:
         """Get the Modbus timeout in milliseconds (thread-safe)."""
         with self._thread_safe_access():
@@ -274,37 +273,50 @@ class WallboxController:
 
 def gpio_worker(wallbox_controller: WallboxController):
     logger = logging.getLogger("GPIO_worker")
-    button1 = Button("GPIO6", pull_up=False)
-    button2 = Button("GPIO16", pull_up=False)
+    
+    try:
+        button1 = Button("GPIO6", pull_up=False)
+        button2 = Button("GPIO16", pull_up=False)
+    except Exception as e:
+        logger.error("Failed to initialize GPIO buttons: %s", e)
+        return
 
     last_state_1 = None
     last_state_2 = None
     logger.info("Started GPIO worker")
 
     while True:
-        """
-        GPIO1 HIGH: Stop charging (0A)
-        GPIO2 HIGH: 16A
-        Both LOW: 6A
-        """
-        time.sleep(0.5)
-        state1 = button1.is_pressed
-        state2 = button2.is_pressed
+        try:
+            """
+            GPIO1 HIGH: Stop charging (0A)
+            GPIO2 HIGH: 16A
+            Both LOW: 6A
+            """
+            time.sleep(0.5)
+            state1 = button1.is_pressed
+            state2 = button2.is_pressed
 
-        if last_state_1 == state1 and last_state_2 == state2:
-            continue
-        last_state_1 = state1
-        last_state_2 = state2
+            if last_state_1 == state1 and last_state_2 == state2:
+                continue
+            last_state_1 = state1
+            last_state_2 = state2
 
-        if state1 and not state2:
-            wallbox_controller.set_max_current(0)
-            logger.info("Set wallbox to 0A")
-        elif not state1 and state2:
-            wallbox_controller.set_max_current(16)
-            logger.info("Set wallbox to 16A")
-        elif not state1 and not state2:
-            wallbox_controller.set_max_current(6)
-            logger.info("Set wallbox to 6A")
+            try:
+                if state1 and not state2:
+                    wallbox_controller.set_max_current(0)
+                    logger.info("Set wallbox to 0A")
+                elif not state1 and state2:
+                    wallbox_controller.set_max_current(16)
+                    logger.info("Set wallbox to 16A")
+                elif not state1 and not state2:
+                    wallbox_controller.set_max_current(6)
+                    logger.info("Set wallbox to 6A")
+            except Exception as e:
+                logger.error("Failed to set wallbox current: %s", e)
+                
+        except Exception as e:
+            logger.error("GPIO worker error: %s", e)
+            time.sleep(1.0)  # Wait before retrying to prevent rapid error loops
 
 
 def main():
@@ -313,34 +325,57 @@ def main():
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+    
+    logger = logging.getLogger(__name__)
 
-    # Create controller
-    controller = WallboxController(
-        port="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0", address=1, keepalive_interval=8.0
-    )
-    controller.start()
+    try:
+        # Create controller
+        controller = WallboxController(
+            port="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0", address=1, keepalive_interval=8.0
+        )
+        controller.start()
+        logger.info("Wallbox controller started successfully")
+    except Exception as e:
+        logger.error("Failed to initialize wallbox controller: %s", e)
+        return
 
-    # Start GPIO worker thread
-    gpio_worker_thread = threading.Thread(
-        target=gpio_worker, args=(controller,), daemon=True
-    )
-    gpio_worker_thread.start()
+    try:
+        # Start GPIO worker thread
+        gpio_worker_thread = threading.Thread(
+            target=gpio_worker, args=(controller,), daemon=True
+        )
+        gpio_worker_thread.start()
+        logger.info("GPIO worker thread started")
+    except Exception as e:
+        logger.error("Failed to start GPIO worker thread: %s", e)
+        controller.stop()
+        return
 
-    # Start web server worker thread
-    from wallbox_control.webserver import web_server_worker
+    try:
+        # Start web server worker thread
+        from wallbox_control.webserver import web_server_worker
 
-    web_worker_thread = threading.Thread(
-        target=web_server_worker, args=(controller, "0.0.0.0", 8000), daemon=True
-    )
-    web_worker_thread.start()
+        web_worker_thread = threading.Thread(
+            target=web_server_worker, args=(controller, "0.0.0.0", 8000), daemon=True
+        )
+        web_worker_thread.start()
+        logger.info("Web server worker thread started")
+    except Exception as e:
+        logger.error("Failed to start web server worker thread: %s", e)
+        controller.stop()
+        return
 
     try:
         # Keep main thread alive
         while True:
             threading.Event().wait(1.0)
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        logging.info("\nShutting down...")
         controller.stop()
+    except Exception as e:
+        logging.error("Unexpected error in main loop: %s", e)
+        controller.stop()
+        raise
 
 
 if __name__ == "__main__":
