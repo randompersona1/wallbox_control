@@ -162,6 +162,16 @@ class WallboxController:
         with self._thread_safe_access():
             return self.wallbox.power_overall
 
+    def get_energy_since_power_on(self) -> int:
+        """Get the energy consumed since power on in VAh (thread-safe)."""
+        with self._thread_safe_access():
+            return self.wallbox.energy_since_power_on
+
+    def get_energy_since_installation(self) -> int:
+        """Get the energy consumed since installation in VAh (thread-safe)."""
+        with self._thread_safe_access():
+            return self.wallbox.energy_since_installation
+
     def get_hardware_max_current(self) -> int:
         """Get the hardware maximum current (thread-safe)."""
         with self._thread_safe_access():

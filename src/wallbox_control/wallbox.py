@@ -137,6 +137,30 @@ class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
         return self._read_register(14, ModbusFunctionCode.READ_INPUT_REGISTER)
 
     @property
+    def energy_since_power_on(self) -> int:
+        """Get the energy consumed since power on in VAh (Volt-Ampere hours)
+        
+        The value is stored as a 32-bit unsigned integer across two registers:
+        - High byte in register 15 (bits 31-16)
+        - Low byte in register 16 (bits 15-0)
+        """
+        return self._read_32bit_from_registers(
+            15, 16, ModbusFunctionCode.READ_INPUT_REGISTER
+        )
+
+    @property
+    def energy_since_installation(self) -> int:
+        """Get the energy consumed since installation in VAh (Volt-Ampere hours)
+        
+        The value is stored as a 32-bit unsigned integer across two registers:
+        - High byte in register 17 (bits 31-16)
+        - Low byte in register 18 (bits 15-0)
+        """
+        return self._read_32bit_from_registers(
+            17, 18, ModbusFunctionCode.READ_INPUT_REGISTER
+        )
+
+    @property
     def hardware_max_current(self) -> int:
         """Get the hardware maximum current"""
         value = self._read_register(100, ModbusFunctionCode.READ_HOLDING_REGISTER)
