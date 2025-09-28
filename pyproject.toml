@@ -1,3 +1,10 @@
+[project.scripts]
+wallbox = "wallbox_control.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "wallbox-control"
 version = "0.1.0"

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import ClassVar
 
-from modbus import (
+from wallbox_control.modbus import (
     ModbusFunctionCode,
     WallboxInstrument,
 )

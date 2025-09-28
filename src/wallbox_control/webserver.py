@@ -4,7 +4,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from main import WallboxController
+from wallbox_control.main import WallboxController
 from pydantic import BaseModel
 
 

@@ -4,7 +4,7 @@ import time
 from contextlib import contextmanager
 
 from gpiozero import Button
-from wallbox import Wallbox
+from wallbox_control.wallbox import Wallbox
 
 
 class WallboxController:
@@ -304,7 +304,7 @@ def main():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Example: Create controller with keepalive every 5 seconds
+    # Create controller
     controller = WallboxController(
         port="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0", address=1, keepalive_interval=8.0
     )
@@ -317,7 +317,7 @@ def main():
     gpio_worker_thread.start()
 
     # Start web server worker thread
-    from webserver import web_server_worker
+    from wallbox_control.webserver import web_server_worker
 
     web_worker_thread = threading.Thread(
         target=web_server_worker, args=(controller, "0.0.0.0", 8000), daemon=True

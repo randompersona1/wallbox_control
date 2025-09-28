@@ -1,0 +1,14 @@
+services:
+  wallbox:
+    image: wallbox:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wallbox-control
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    devices:
+      - "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0:/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0"
