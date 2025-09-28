@@ -1,7 +1,9 @@
 import logging
 import threading
+import time
 from contextlib import contextmanager
 
+from gpiozero import Button
 from wallbox import Wallbox
 
 
@@ -261,22 +263,38 @@ class WallboxController:
 
 
 def gpio_worker(wallbox_controller: WallboxController):
+    logger = logging.getLogger("GPIO_worker")
+    button1 = Button("GPIO6", pull_up=False)
+    button2 = Button("GPIO16", pull_up=False)
+
+    last_state_1 = None
+    last_state_2 = None
+    logger.info("Started GPIO worker")
+
     while True:
         """
         GPIO1 HIGH: Stop charging (0A)
         GPIO2 HIGH: 16A
         Both LOW: 6A
         """
-        # get gpio status 13 state here
-        gpio1 = False
-        # get gpio status 14 state here
-        gpio2 = False
-        if gpio1 and not gpio2:
+        time.sleep(0.5)
+        state1 = button1.is_pressed
+        state2 = button2.is_pressed
+
+        if last_state_1 == state1 and last_state_2 == state2:
+            continue
+        last_state_1 = state1
+        last_state_2 = state2
+
+        if state1 and not state2:
             wallbox_controller.set_max_current(0)
-        elif gpio2:
+            logger.info("Set wallbox to 0A")
+        elif not state1 and state2:
             wallbox_controller.set_max_current(16)
-        else:
+            logger.info("Set wallbox to 16A")
+        elif not state1 and not state2:
             wallbox_controller.set_max_current(6)
+            logger.info("Set wallbox to 6A")
 
 
 def main():

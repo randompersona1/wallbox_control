@@ -203,15 +203,15 @@ class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
     @property
     def max_current(self) -> float:
         """Get the maximum current in Amperes"""
-        return self._read_register(260, ModbusFunctionCode.READ_HOLDING_REGISTER) / 10.0
+        return self._read_register(261, ModbusFunctionCode.READ_HOLDING_REGISTER) / 10.0
 
     @max_current.setter
     def max_current(self, value: float) -> bool:
         """Set the maximum current in Amperes"""
         int_value = int(value * 10)
-        if int_value < 60 or int_value > 160:
+        if int_value != 0 and (int_value < 60 or int_value > 160):
             raise ValueError(f"Invalid max current: {value}")
-        return self._write_register(260, fit_uint16(int_value))
+        return self._write_register(261, fit_uint16(int_value))
 
     @property
     def failsafe_current(self) -> float:
