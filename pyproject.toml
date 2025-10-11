@@ -15,7 +15,8 @@ dependencies = [
     "fastapi>=0.117.1",
     "gpiozero>=2.0.1",
     "minimalmodbus>=2.1.1",
-    "rpi-lgpio>=0.6",
+    "pigpio>=1.78 ; sys_platform != 'linux'",
+    "rpi-lgpio>=0.6 ; sys_platform == 'linux'",
     "uvicorn>=0.37.0",
 ]
 authors = [
@@ -27,7 +28,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 [dependency-groups]
