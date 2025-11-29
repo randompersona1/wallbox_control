@@ -1,3 +1,4 @@
+import logging
 from enum import Enum
 
 import minimalmodbus
@@ -26,6 +27,7 @@ class WallboxInstrument(minimalmodbus.Instrument):
             slave_address: Modbus slave address of the wallbox
         """
         super().__init__(serial_port, slave_address)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self._configure_serial()
 
     def _configure_serial(self) -> None:
@@ -53,10 +55,18 @@ class WallboxInstrument(minimalmodbus.Instrument):
         """
         try:
             return self.read_register(register_address, 0, function_code.value)
-        except Exception as e:
+        except Exception as exc:
+            logger = getattr(
+                self,
+                "logger",
+                logging.getLogger(f"{__name__}.{self.__class__.__name__}"),
+            )
+            logger.exception(
+                "Failed to read register %s with function %s", register_address, function_code
+            )
             raise RuntimeError(
-                f"Failed to read register {register_address}: {e}"
-            ) from e
+                f"Failed to read register {register_address}: {exc}"
+            ) from exc
 
     def _read_32bit_from_registers(
         self,
@@ -66,12 +76,12 @@ class WallboxInstrument(minimalmodbus.Instrument):
     ) -> int:
         """
         Read a 32-bit value from two 16-bit registers.
-        
+
         Args:
             high_register: Register address containing the high 16 bits
-            low_register: Register address containing the low 16 bits  
+            low_register: Register address containing the low 16 bits
             function_code: The Modbus function code to use
-            
+
         Returns:
             The 32-bit value constructed from the two registers
         """
@@ -80,10 +90,21 @@ class WallboxInstrument(minimalmodbus.Instrument):
             low_value = self.read_register(low_register, 0, function_code.value)
             # Combine high and low bytes: high_byte * 2^16 + low_byte
             return (high_value << 16) + low_value
-        except Exception as e:
+        except Exception as exc:
+            logger = getattr(
+                self,
+                "logger",
+                logging.getLogger(f"{__name__}.{self.__class__.__name__}"),
+            )
+            logger.exception(
+                "Failed to read 32-bit register pair (%s, %s) with function %s",
+                high_register,
+                low_register,
+                function_code,
+            )
             raise RuntimeError(
-                f"Failed to read 32-bit value from registers {high_register},{low_register}: {e}"
-            ) from e
+                f"Failed to read 32-bit value from registers {high_register},{low_register}: {exc}"
+            ) from exc
 
     def _write_register(self, register_address: int, value: int) -> bool:
         """
@@ -95,11 +116,31 @@ class WallboxInstrument(minimalmodbus.Instrument):
         """
         try:
             self.write_register(register_address, value, 0, WRITE_HOLDING_REGISTER)
-        except Exception as e:
+        except Exception as exc:
+            logger = getattr(
+                self,
+                "logger",
+                logging.getLogger(f"{__name__}.{self.__class__.__name__}"),
+            )
+            logger.exception(
+                "Failed to write register %s with value %s", register_address, value
+            )
             raise RuntimeError(
-                f"Failed to write value {value} to register {register_address}: {e}"
-            ) from e
+                f"Failed to write value {value} to register {register_address}: {exc}"
+            ) from exc
         v = self._read_register(
             register_address, ModbusFunctionCode.READ_HOLDING_REGISTER
         )
-        return v == value
+        if v != value:
+            message = (
+                f"Verification mismatch after writing register {register_address}: "
+                f"expected {value}, read back {v}"
+            )
+            logger = getattr(
+                self,
+                "logger",
+                logging.getLogger(f"{__name__}.{self.__class__.__name__}"),
+            )
+            logger.error(message)
+            raise RuntimeError(message)
+        return True

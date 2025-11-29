@@ -3,9 +3,10 @@ import threading
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from wallbox_control.main import WallboxController
+from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
+
+from wallbox_control.main import WallboxController
 
 
 class MaxCurrentRequest(BaseModel):
@@ -71,7 +72,7 @@ class WebServerController:
             try:
                 return self.wallbox_controller.get_all_properties()
             except Exception as e:
-                self.logger.error("Failed to get wallbox status: %s", e)
+                self.logger.exception("Failed to get wallbox status")
                 raise HTTPException(
                     status_code=500, detail=f"Failed to get wallbox status: {str(e)}"
                 ) from e
@@ -100,27 +101,56 @@ class WebServerController:
                         detail="Maximum current exceeds safe limit (63A)",
                     )
 
-                # Set the current
-                success = self.wallbox_controller.set_max_current(request.max_current)
+                decision = self.wallbox_controller.request_manual_max_current(
+                    request.max_current
+                )
 
-                if not success:
+                decision_info = {
+                    "requested": request.max_current,
+                    "applied_current": decision.applied_current,
+                    "origin": decision.origin,
+                    "overridden": decision.overridden,
+                    "limit_debug": decision.snapshots,
+                }
+
+                if decision.applied_current is None:
                     raise HTTPException(
-                        status_code=500, detail="Failed to set maximum current"
+                        status_code=500,
+                        detail={
+                            "message": "No current target resolved",
+                            **decision_info,
+                        },
+                    )
+
+                if decision.overridden and (
+                    abs(decision.applied_current - request.max_current) > 1e-6
+                ):
+                    self.logger.warning(
+                        "Manual current request %.1fA overridden by %s",
+                        request.max_current,
+                        decision.origin,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "message": "Manual request overridden by higher priority limit",
+                            **decision_info,
+                        },
                     )
 
                 self.logger.info(
-                    "Maximum current set to %.1fA via API", request.max_current
+                    "Maximum current set to %.1fA via API", decision.applied_current
                 )
 
                 return {
-                    "message": f"Maximum current successfully set to {request.max_current}A",
-                    "max_current": request.max_current,
+                    "message": f"Maximum current successfully set to {decision.applied_current:.1f}A",
+                    **decision_info,
                 }
 
             except HTTPException:
                 raise
             except Exception as e:
-                self.logger.error("Failed to set max current: %s", e)
+                self.logger.exception("Failed to set max current")
                 raise HTTPException(
                     status_code=500, detail=f"Failed to set max current: {str(e)}"
                 ) from e
@@ -156,8 +186,8 @@ class WebServerController:
                     log_level="info",
                     access_log=True,
                 )
-            except Exception as e:
-                self.logger.error("Web server failed: %s", e)
+            except Exception:
+                self.logger.exception("Web server failed")
             finally:
                 self._running = False
 
@@ -209,7 +239,7 @@ def web_server_worker(
         port: Port number to run the server on (default: 8000)
     """
     logger = logging.getLogger("WebServer_worker")
-    
+
     try:
         server = WebServerController(wallbox_controller, host, port)
         server.start()
@@ -221,10 +251,10 @@ def web_server_worker(
         except KeyboardInterrupt:
             logger.info("Web server worker received shutdown signal")
             server.stop()
-        except Exception as e:
-            logger.error("Web server worker error: %s", e)
+        except Exception:
+            logger.exception("Web server worker error")
             server.stop()
             raise
-    except Exception as e:
-        logger.error("Failed to start web server: %s", e)
+    except Exception:
+        logger.exception("Failed to start web server")
         raise

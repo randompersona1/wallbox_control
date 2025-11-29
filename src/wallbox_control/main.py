@@ -2,8 +2,16 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
+from typing import Any
 
 from gpiozero import Button
+
+from wallbox_control.error_handling import install_global_exception_logging
+from wallbox_control.limits import (
+    CurrentLimitManager,
+    HardwareInputLimiter,
+    LimitDecision,
+)
 from wallbox_control.wallbox import Wallbox
 
 
@@ -39,6 +47,10 @@ class WallboxController:
 
         # Configure logging
         self.logger = logging.getLogger(__name__)
+        self._limit_manager = CurrentLimitManager()
+        self._hardware_limiter = HardwareInputLimiter()
+        self._last_limit_decision: LimitDecision | None = None
+        self._last_applied_current: float | None = None
 
     @contextmanager
     def _thread_safe_access(self):
@@ -87,11 +99,38 @@ class WallboxController:
                     # Send keepalive by reading the modbus register layout version
                     version = self.wallbox.modbus_register_layout_version
                     self.logger.debug("Keepalive sent, version: %s", version)
-            except Exception as e:
-                self.logger.error("Keepalive failed: %s", e)
+            except Exception:
+                self.logger.exception("Keepalive failed")
 
             # Wait for the specified interval or until stop is requested
             self._stop_keepalive.wait(self._keepalive_interval)
+
+    def _apply_decision(self, decision: LimitDecision) -> float | None:
+        target = decision.applied_current
+        if target is None:
+            return None
+
+        if self._last_applied_current is not None and abs(self._last_applied_current - target) < 0.05:
+            return target
+
+        origin = decision.origin or "unknown"
+        try:
+            self.wallbox.max_current = target
+            self._last_applied_current = target
+            log_level = logging.INFO if decision.overridden else logging.DEBUG
+            self.logger.log(
+                log_level,
+                "Max current updated to %.1fA (source=%s)",
+                target,
+                origin,
+            )
+            return target
+        except Exception:
+            self._last_applied_current = None
+            self.logger.exception(
+                "Failed to apply max current decision from %s", origin
+            )
+            return None
 
     def __enter__(self):
         """Context manager entry."""
@@ -222,9 +261,32 @@ class WallboxController:
 
     def set_max_current(self, value: float) -> bool:
         """Set the maximum current in Amperes (thread-safe)."""
+        decision = self.request_manual_max_current(value)
+        return decision.applied_current == value and not decision.overridden
+
+    def request_manual_max_current(self, value: float) -> LimitDecision:
+        """Request a manual maximum current and apply current limits."""
         with self._thread_safe_access():
-            self.wallbox.max_current = value
-            return True
+            decision = self._limit_manager.request_manual(value)
+            self._last_limit_decision = decision
+            applied = self._apply_decision(decision)
+            decision.applied_current = applied
+            return decision
+
+    def update_hardware_inputs(self, gpio13_high: bool, gpio14_high: bool) -> LimitDecision:
+        """Update the hardware input override state and apply resulting limits."""
+        with self._thread_safe_access():
+            snapshot = self._hardware_limiter.evaluate(gpio13_high, gpio14_high)
+            decision = self._limit_manager.apply_override_snapshot(snapshot)
+            self._last_limit_decision = decision
+            applied = self._apply_decision(decision)
+            decision.applied_current = applied
+            return decision
+
+    def get_limit_debug(self) -> dict[str, Any]:
+        """Return internal current limit debug information."""
+        with self._thread_safe_access():
+            return self._limit_manager.debug_snapshot()
 
     def get_failsafe_current(self) -> float:
         """Get the failsafe current in Amperes (thread-safe)."""
@@ -268,30 +330,27 @@ class WallboxController:
                     result[prop_name] = getattr(self.wallbox, prop_name)
                 except Exception as e:
                     result[prop_name] = f"Error: {e}"
+            result["current_limit"] = self._limit_manager.debug_snapshot()
         return result
 
 
 def gpio_worker(wallbox_controller: WallboxController):
     logger = logging.getLogger("GPIO_worker")
-    
+
     try:
-        button1 = Button("GPIO6", pull_up=False)
-        button2 = Button("GPIO16", pull_up=False)
-    except Exception as e:
-        logger.error("Failed to initialize GPIO buttons: %s", e)
+        button1 = Button("GPIO13", pull_up=False)
+        button2 = Button("GPIO14", pull_up=False)
+    except Exception:
+        logger.exception("Failed to initialize GPIO buttons")
         return
 
     last_state_1 = None
     last_state_2 = None
+    last_target: float | None = None
     logger.info("Started GPIO worker")
 
     while True:
         try:
-            """
-            GPIO1 HIGH: Stop charging (0A)
-            GPIO2 HIGH: 16A
-            Both LOW: 6A
-            """
             time.sleep(0.5)
             state1 = button1.is_pressed
             state2 = button2.is_pressed
@@ -302,20 +361,22 @@ def gpio_worker(wallbox_controller: WallboxController):
             last_state_2 = state2
 
             try:
-                if state1 and not state2:
-                    wallbox_controller.set_max_current(0)
-                    logger.info("Set wallbox to 0A")
-                elif not state1 and state2:
-                    wallbox_controller.set_max_current(16)
-                    logger.info("Set wallbox to 16A")
-                elif not state1 and not state2:
-                    wallbox_controller.set_max_current(6)
-                    logger.info("Set wallbox to 6A")
-            except Exception as e:
-                logger.error("Failed to set wallbox current: %s", e)
-                
-        except Exception as e:
-            logger.error("GPIO worker error: %s", e)
+                decision = wallbox_controller.update_hardware_inputs(state1, state2)
+                target = decision.applied_current
+                if target != last_target:
+                    formatted = f"{target:.1f}" if target is not None else "n/a"
+                    logger.info(
+                        "Hardware inputs -> %sA (GPIO13=%s, GPIO14=%s)",
+                        formatted,
+                        state1,
+                        state2,
+                    )
+                    last_target = target
+            except Exception:
+                logger.exception("Failed to set wallbox current")
+
+        except Exception:
+            logger.exception("GPIO worker error")
             time.sleep(1.0)  # Wait before retrying to prevent rapid error loops
 
 
@@ -325,7 +386,9 @@ def main():
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    
+
+    install_global_exception_logging(logging.getLogger(__name__))
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -335,8 +398,8 @@ def main():
         )
         controller.start()
         logger.info("Wallbox controller started successfully")
-    except Exception as e:
-        logger.error("Failed to initialize wallbox controller: %s", e)
+    except Exception:
+        logger.exception("Failed to initialize wallbox controller")
         return
 
     try:
@@ -346,8 +409,8 @@ def main():
         )
         gpio_worker_thread.start()
         logger.info("GPIO worker thread started")
-    except Exception as e:
-        logger.error("Failed to start GPIO worker thread: %s", e)
+    except Exception:
+        logger.exception("Failed to start GPIO worker thread")
         controller.stop()
         return
 
@@ -360,8 +423,8 @@ def main():
         )
         web_worker_thread.start()
         logger.info("Web server worker thread started")
-    except Exception as e:
-        logger.error("Failed to start web server worker thread: %s", e)
+    except Exception:
+        logger.exception("Failed to start web server worker thread")
         controller.stop()
         return
 
@@ -372,8 +435,8 @@ def main():
     except KeyboardInterrupt:
         logging.info("\nShutting down...")
         controller.stop()
-    except Exception as e:
-        logging.error("Unexpected error in main loop: %s", e)
+    except Exception:
+        logging.getLogger(__name__).exception("Unexpected error in main loop")
         controller.stop()
         raise
 

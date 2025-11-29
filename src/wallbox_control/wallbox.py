@@ -139,7 +139,7 @@ class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
     @property
     def energy_since_power_on(self) -> int:
         """Get the energy consumed since power on in VAh (Volt-Ampere hours)
-        
+
         The value is stored as a 32-bit unsigned integer across two registers:
         - High byte in register 15 (bits 31-16)
         - Low byte in register 16 (bits 15-0)
@@ -151,7 +151,7 @@ class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
     @property
     def energy_since_installation(self) -> int:
         """Get the energy consumed since installation in VAh (Volt-Ampere hours)
-        
+
         The value is stored as a 32-bit unsigned integer across two registers:
         - High byte in register 17 (bits 31-16)
         - Low byte in register 18 (bits 15-0)
