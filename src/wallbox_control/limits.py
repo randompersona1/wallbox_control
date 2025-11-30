@@ -65,33 +65,50 @@ class CurrentLimitManager:
         return self._resolve()
 
     def _resolve(self) -> LimitDecision:
-        overrides = [
+        # Get hardware limit (maximum allowed current)
+        hardware_limits = [
             snap
             for snap in self._snapshots.values()
             if snap.source != LimitSource.MANUAL_REQUEST and snap.enforced and snap.current_amps is not None
         ]
-        if overrides:
-            current = min(snap.current_amps for snap in overrides)
+
+        # Get manual request (desired current)
+        manual_snap = self._snapshots.get(LimitSource.MANUAL_REQUEST)
+        manual_current = manual_snap.current_amps if manual_snap and manual_snap.enforced else None
+
+        # Determine applied current based on hardware limit and manual request
+        if hardware_limits and manual_current is not None:
+            # Both hardware limit and manual request exist
+            hw_max = min(snap.current_amps for snap in hardware_limits)
+            applied_current = min(manual_current, hw_max)
+            origin = LimitSource.MANUAL_REQUEST.value
+            overridden = manual_current > hw_max  # Manual is overridden if it exceeds hardware limit
+        elif hardware_limits:
+            # Only hardware limit exists, no manual request
+            applied_current = min(snap.current_amps for snap in hardware_limits)
             origin = next(
                 snap.source.value
-                for snap in overrides
-                if snap.current_amps == current
+                for snap in hardware_limits
+                if snap.current_amps == applied_current
             )
-            decision = LimitDecision(
-                applied_current=current,
-                origin=origin,
-                overridden=True,
-                snapshots={src.value: snap.as_dict() for src, snap in self._snapshots.items()},
-            )
+            overridden = False
+        elif manual_current is not None:
+            # Only manual request exists, no hardware limit
+            applied_current = manual_current
+            origin = LimitSource.MANUAL_REQUEST.value
+            overridden = False
         else:
-            current = self._manual_request
-            origin = LimitSource.MANUAL_REQUEST.value if current is not None else None
-            decision = LimitDecision(
-                applied_current=current,
-                origin=origin,
-                overridden=False,
-                snapshots={src.value: snap.as_dict() for src, snap in self._snapshots.items()},
-            )
+            # No limits at all
+            applied_current = None
+            origin = None
+            overridden = False
+
+        decision = LimitDecision(
+            applied_current=applied_current,
+            origin=origin,
+            overridden=overridden,
+            snapshots={src.value: snap.as_dict() for src, snap in self._snapshots.items()},
+        )
         self._last_decision = decision
         return decision
 
