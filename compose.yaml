@@ -10,5 +10,7 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+    user: "0:0"
     devices:
+      - "/dev/gpiochip4:/dev/gpiochip4"
       - "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0:/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG018W3B-if00-port0"
