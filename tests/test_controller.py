@@ -77,8 +77,8 @@ def test_repeated_manual_request_avoids_duplicate_write(fake_wallbox_factory):
 
 def test_gpio_worker_reacts_to_state_changes(monkeypatch):
     sequences = {
-        "GPIO13": [False, True],
-        "GPIO14": [False, False],
+        "GPIO6": [False, True],
+        "GPIO16": [False, False],
     }
 
     class DummyButton:

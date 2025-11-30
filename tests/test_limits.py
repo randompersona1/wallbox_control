@@ -12,10 +12,10 @@ from wallbox_control.limits import (
 @pytest.mark.parametrize(
     ("first_high", "second_high", "expected_current", "expected_mode"),
     [
-        (True, True, 6.0, "both_high"),
-        (True, False, 16.0, "single_high"),
-        (False, True, 16.0, "single_high"),
-        (False, False, 0.0, "both_low"),
+        (True, True, 6.0, "reduced_charge"),  # Both HIGH -> 6A reduced charge
+        (True, False, 0.0, "no_charge"),  # First HIGH only -> 0A no charge
+        (False, True, 16.0, "normal_charge"),  # Second HIGH only -> 16A normal charge
+        (False, False, 6.0, "reduced_charge"),  # Both LOW -> 6A reduced charge
     ],
 )
 def test_hardware_input_limiter_modes(first_high, second_high, expected_current, expected_mode):

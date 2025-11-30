@@ -338,7 +338,7 @@ def gpio_worker(wallbox_controller: WallboxController):
     logger = logging.getLogger("GPIO_worker")
 
     try:
-        button1 = Button("GPIO06", pull_up=False)
+        button1 = Button("GPIO6", pull_up=False)
         button2 = Button("GPIO16", pull_up=False)
     except Exception:
         logger.exception("Failed to initialize GPIO buttons")

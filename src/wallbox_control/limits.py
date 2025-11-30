@@ -112,7 +112,7 @@ class CurrentLimitManager:
 
 
 class HardwareInputLimiter:
-    def __init__(self, pin_labels: tuple[str, str] = ("GPIO06", "GPIO16")) -> None:
+    def __init__(self, pin_labels: tuple[str, str] = ("GPIO6", "GPIO16")) -> None:
         self._pin_labels = pin_labels
         self._last_inputs: tuple[bool, bool] | None = None
 
