@@ -112,25 +112,25 @@ class CurrentLimitManager:
 
 
 class HardwareInputLimiter:
-    def __init__(self, pin_labels: tuple[str, str] = ("GPIO13", "GPIO14")) -> None:
+    def __init__(self, pin_labels: tuple[str, str] = ("GPIO06", "GPIO16")) -> None:
         self._pin_labels = pin_labels
         self._last_inputs: tuple[bool, bool] | None = None
 
     def evaluate(self, first_high: bool, second_high: bool) -> LimitSnapshot:
         self._last_inputs = (first_high, second_high)
 
-        if first_high and second_high:
-            current = 6.0
-            mode = "both_high"
-            description = "Hardware override: both inputs HIGH -> 6A"
-        elif first_high or second_high:
+        if first_high and not second_high:
+            current = 0
+            mode = "no_charge"
+            description = "Hardware override: input 1 HIGH -> 0A"
+        elif not first_high and second_high:
             current = 16.0
-            mode = "single_high"
-            description = "Hardware override: one input HIGH -> 16A"
+            mode = "normal_charge"
+            description = "Hardware override: input 2 HIGH -> 16A"
         else:
-            current = 0.0
-            mode = "both_low"
-            description = "Hardware override: both inputs LOW -> 0A"
+            current = 6.0
+            mode = "reduced_charge"
+            description = "Hardware override: both inputs LOW or HIGH -> 6A"
 
         return LimitSnapshot(
             source=LimitSource.HARDWARE_INPUT,
