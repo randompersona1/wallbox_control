@@ -161,22 +161,6 @@ class Wallbox(WallboxInstrument, metaclass=_PropIndexer):
         )
 
     @property
-    def hardware_max_current(self) -> int:
-        """Get the hardware maximum current"""
-        value = self._read_register(100, ModbusFunctionCode.READ_HOLDING_REGISTER)
-        if value < 6 or value > 16:
-            raise ValueError(f"Invalid hardware max current: {value}")
-        return value
-
-    @property
-    def hardware_min_current(self) -> int:
-        """Get the hardware minimum current"""
-        value = self._read_register(101, ModbusFunctionCode.READ_HOLDING_REGISTER)
-        if value < 6 or value > 16:
-            raise ValueError(f"Invalid hardware min current: {value}")
-        return value
-
-    @property
     def modbus_timeout(self) -> int:
         """Get the Modbus timeout in milliseconds"""
         return self._read_register(257, ModbusFunctionCode.READ_HOLDING_REGISTER)
