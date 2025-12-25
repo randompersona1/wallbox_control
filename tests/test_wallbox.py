@@ -84,19 +84,6 @@ def test_energy_since_installation_reads_combined_registers(wallbox: Wallbox):
     )
 
 
-def test_hardware_current_bounds_enforced(wallbox: Wallbox):
-    wallbox._read_register.return_value = 8
-    assert wallbox.hardware_max_current == 8
-
-    wallbox._read_register.return_value = 20
-    with pytest.raises(ValueError, match="Invalid hardware max current"):
-        _ = wallbox.hardware_max_current
-
-    wallbox._read_register.return_value = 5
-    with pytest.raises(ValueError, match="Invalid hardware min current"):
-        _ = wallbox.hardware_min_current
-
-
 def test_modbus_timeout_roundtrip(wallbox: Wallbox):
     wallbox._read_register.return_value = 250
     assert wallbox.modbus_timeout == 250

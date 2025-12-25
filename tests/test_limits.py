@@ -10,24 +10,22 @@ from wallbox_control.limits import (
 
 
 @pytest.mark.parametrize(
-    ("first_high", "second_high", "expected_current", "expected_mode"),
+    ("first_high", "expected_current", "expected_mode"),
     [
-        (True, True, 6.0, "reduced_charge"),  # Both HIGH -> 6A reduced charge
-        (True, False, 0.0, "no_charge"),  # First HIGH only -> 0A no charge
-        (False, True, 16.0, "normal_charge"),  # Second HIGH only -> 16A normal charge
-        (False, False, 6.0, "reduced_charge"),  # Both LOW -> 6A reduced charge
+        (True, 6.0, "reduced_charge"),  # HIGH -> 6A reduced charge
+        (False, 16.0, "normal_charge"),  # LOW -> 16A normal charge
     ],
 )
-def test_hardware_input_limiter_modes(first_high, second_high, expected_current, expected_mode):
-    limiter = HardwareInputLimiter(("GPIO13", "GPIO14"))
+def test_hardware_input_limiter_modes(first_high, expected_current, expected_mode):
+    limiter = HardwareInputLimiter("GPIO13")
 
-    snapshot = limiter.evaluate(first_high, second_high)
+    snapshot = limiter.evaluate(first_high)
 
     assert snapshot.source is LimitSource.HARDWARE_INPUT
     assert snapshot.enforced is True
     assert snapshot.current_amps == expected_current
     assert snapshot.details["mode"] == expected_mode
-    assert snapshot.details["inputs"] == {"GPIO13": first_high, "GPIO14": second_high}
+    assert snapshot.details["inputs"] == {"GPIO13": first_high}
 
 
 def test_current_limit_manager_manual_only():

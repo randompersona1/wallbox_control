@@ -273,10 +273,10 @@ class WallboxController:
             decision.applied_current = applied
             return decision
 
-    def update_hardware_inputs(self, gpio13_high: bool, gpio14_high: bool) -> LimitDecision:
+    def update_hardware_input(self, gpio13_high: bool) -> LimitDecision:
         """Update the hardware input override state and apply resulting limits."""
         with self._thread_safe_access():
-            snapshot = self._hardware_limiter.evaluate(gpio13_high, gpio14_high)
+            snapshot = self._hardware_limiter.evaluate(gpio13_high)
             decision = self._limit_manager.apply_override_snapshot(snapshot)
             self._last_limit_decision = decision
             applied = self._apply_decision(decision)
@@ -339,13 +339,11 @@ def gpio_worker(wallbox_controller: WallboxController):
 
     try:
         button1 = Button("GPIO6", pull_up=False)
-        button2 = Button("GPIO16", pull_up=False)
     except Exception:
         logger.exception("Failed to initialize GPIO buttons")
         return
 
     last_state_1 = None
-    last_state_2 = None
     last_target: float | None = None
     logger.info("Started GPIO worker")
 
@@ -353,15 +351,13 @@ def gpio_worker(wallbox_controller: WallboxController):
         try:
             time.sleep(0.5)
             state1 = button1.is_pressed
-            state2 = button2.is_pressed
 
-            if last_state_1 == state1 and last_state_2 == state2:
+            if last_state_1 == state1:
                 continue
             last_state_1 = state1
-            last_state_2 = state2
 
             try:
-                decision = wallbox_controller.update_hardware_inputs(state1, state2)
+                decision = wallbox_controller.update_hardware_input(state1)
                 target = decision.applied_current
                 if target != last_target:
                     formatted = f"{target:.1f}" if target is not None else "n/a"
@@ -369,7 +365,6 @@ def gpio_worker(wallbox_controller: WallboxController):
                         "Hardware inputs -> %sA (GPIO13=%s, GPIO14=%s)",
                         formatted,
                         state1,
-                        state2,
                     )
                     last_target = target
             except Exception:

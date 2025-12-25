@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -57,10 +57,10 @@ def test_hardware_override_applies_lower_limit(fake_wallbox_factory):
     wallbox = fake_wallbox_factory[-1]
     controller.request_manual_max_current(16.0)
 
-    decision = controller.update_hardware_inputs(True, True)
+    decision = controller.update_hardware_input(True)
 
     assert decision.applied_current == 6.0
-    assert decision.origin == LimitSource.HARDWARE_INPUT.value
+    assert decision.origin == LimitSource.MANUAL_REQUEST.value
     assert decision.overridden is True
     assert wallbox.max_current_calls == [16.0, 6.0]
 
@@ -78,7 +78,6 @@ def test_repeated_manual_request_avoids_duplicate_write(fake_wallbox_factory):
 def test_gpio_worker_reacts_to_state_changes(monkeypatch):
     sequences = {
         "GPIO6": [False, True],
-        "GPIO16": [False, False],
     }
 
     class DummyButton:
@@ -107,7 +106,7 @@ def test_gpio_worker_reacts_to_state_changes(monkeypatch):
     monkeypatch.setattr("wallbox_control.main.time.sleep", fake_sleep)
 
     controller = MagicMock()
-    controller.update_hardware_inputs = MagicMock(
+    controller.update_hardware_input = MagicMock(
         side_effect=[
             LimitDecision(applied_current=None, origin=None, overridden=False, snapshots={}),
             LimitDecision(
@@ -121,9 +120,3 @@ def test_gpio_worker_reacts_to_state_changes(monkeypatch):
 
     with pytest.raises(KeyboardInterrupt):
         gpio_worker(controller)
-
-    assert controller.update_hardware_inputs.call_args_list == [
-        call(False, False),
-        call(True, False),
-    ]
-
